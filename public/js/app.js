@@ -41,6 +41,7 @@ let currentBoard = null;
 let currentSprint = null;
 let allCards = [];
 let allBoards = [];
+let allLists = [];
 let vistaActual = 'kanban'; // 'kanban' o 'lista'
 
 // ==========================
@@ -193,6 +194,7 @@ async function load(boardId = null) {
   currentSprint = js.sprintActivo;
   allCards = js.cards;
   allBoards = js.boards;
+  allLists = js.lists;
   
   document.getElementById('currentBoardName').textContent = js.board?.nombre || 'Sin tablero';
   
@@ -254,9 +256,9 @@ function render(lists, cards) {
   board.innerHTML = '';
   
   const fixedLists = [
-    { id: 'pendiente', title: 'Pendiente', cssClass: 'pendiente' },
+    { id: 'pendiente', title: 'Por Hacer', cssClass: 'pendiente' },
     { id: 'en-progreso', title: 'En Progreso', cssClass: 'en-progreso' },
-    { id: 'hecho', title: 'Hecho', cssClass: 'hecho' }
+    { id: 'hecho', title: 'Completado', cssClass: 'hecho' }
   ];
   
   const cardsByList = {};
@@ -266,7 +268,7 @@ function render(lists, cards) {
   });
 
   fixedLists.forEach((fixedList, index) => {
-    const dbList = lists.find(l => l.title === fixedList.title) || lists[index];
+    const dbList = lists.find(l => l.title === fixedList.title);
     if (!dbList) return;
     
     const col = document.createElement('div');
@@ -302,23 +304,88 @@ function render(lists, cards) {
 }
 
 /**
- * Renderizar vista de Lista/Tabla
+ * Renderizar vista de Lista/Tabla con filtros
  */
 function renderListaView() {
   const tbody = document.getElementById('listaTableBody');
   tbody.innerHTML = '';
   
+  // Construir mapeo de list_id -> nombre de lista desde los datos del API
   const lists = {};
-  document.querySelectorAll('.list').forEach(l => {
-    const listId = l.dataset.listId;
-    const listTitle = l.querySelector('.list-title')?.textContent || 'Sin estado';
-    lists[listId] = listTitle;
+  allLists.forEach(l => {
+    lists[l.id] = l.title;
   });
   
-  const sortedCards = [...allCards].sort((a, b) => b.id - a.id);
+  // Obtener valores de filtros
+  const filtroFechaInicio = document.getElementById('filtroFechaInicio')?.value;
+  const filtroFechaFin = document.getElementById('filtroFechaFin')?.value;
+  const filtroEstado = document.getElementById('filtroEstado')?.value;
+  const filtroCategoria = document.getElementById('filtroCategoria')?.value;
+  
+  // Mapear estados a nombres de listas
+  const estadoMap = {
+    'pendiente': 'Por Hacer',
+    'en_progreso': 'En Progreso',
+    'hecho': 'Completado'
+  };
+  
+  // Filtrar tarjetas
+  let filteredCards = [...allCards];
+  
+  // Filtrar por rango de fechas (fecha de creación)
+  if (filtroFechaInicio) {
+    const fechaInicio = new Date(filtroFechaInicio);
+    fechaInicio.setHours(0, 0, 0, 0);
+    filteredCards = filteredCards.filter(card => {
+      if (!card.created_at) return false;
+      const cardDate = new Date(card.created_at);
+      cardDate.setHours(0, 0, 0, 0);
+      return cardDate >= fechaInicio;
+    });
+  }
+  
+  if (filtroFechaFin) {
+    const fechaFin = new Date(filtroFechaFin);
+    fechaFin.setHours(23, 59, 59, 999);
+    filteredCards = filteredCards.filter(card => {
+      if (!card.created_at) return false;
+      const cardDate = new Date(card.created_at);
+      return cardDate <= fechaFin;
+    });
+  }
+  
+  // Filtrar por estado
+  if (filtroEstado) {
+    const estadoNombre = estadoMap[filtroEstado];
+    filteredCards = filteredCards.filter(card => {
+      const cardEstado = lists[card.list_id] || '';
+      return cardEstado.includes(estadoNombre);
+    });
+  }
+  
+  // Filtrar por categoría
+  if (filtroCategoria) {
+    filteredCards = filteredCards.filter(card => {
+      return card.categoria === filtroCategoria;
+    });
+  }
+  
+  const sortedCards = filteredCards.sort((a, b) => b.id - a.id);
+  
+  // Mostrar mensaje si no hay resultados
+  if (sortedCards.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">📭 No se encontraron tareas con los filtros aplicados</td></tr>';
+    return;
+  }
   
   sortedCards.forEach(card => {
     const tr = document.createElement('tr');
+    
+    // Calcular tiempo transcurrido
+    const elapsed = card.created_at ? getTimeElapsed(card.created_at) : null;
+    const elapsedBadge = elapsed 
+      ? `<span class="badge" style="background: ${elapsed.timeColor}; color: white; font-size: 0.75rem; font-weight: 600;">${elapsed.timeIcon} ${elapsed.timeText}</span>`
+      : '';
     
     const estadoNombre = lists[card.list_id] || 'Sin estado';
     let estadoBadge = '';
@@ -373,6 +440,7 @@ function renderListaView() {
       <td>
         <div class="fw-semibold">${escapeHtml(card.title)}</div>
         ${card.description ? `<small class="text-muted">${escapeHtml(card.description)}</small>` : ''}
+        <div class="mt-1">${elapsedBadge}</div>
       </td>
       <td>${estadoBadge}</td>
       <td>${categoriaBadge}</td>
@@ -384,6 +452,12 @@ function renderListaView() {
         <button class="btn btn-sm btn-outline-danger btn-del-lista" data-card-id="${card.id}">🗑️</button>
       </td>
     `;
+    
+    // Doble click en la fila para abrir modal
+    tr.addEventListener('dblclick', () => {
+      openCardModal(card);
+    });
+    tr.style.cursor = 'pointer';
     
     tbody.appendChild(tr);
   });
@@ -410,6 +484,66 @@ function renderListaView() {
 /**
  * Renderizar una tarjeta individual
  */
+/**
+ * Calcular tiempo transcurrido desde la creación de la tarjeta
+ */
+function getTimeElapsed(createdAt) {
+  const created = new Date(createdAt);
+  const now = new Date();
+  const diffMs = now - created;
+  const diffMins = Math.floor(diffMs / (1000 * 60));
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  
+  let timeText = '';
+  let timeColor = '#10b981'; // Verde por defecto
+  let timeIcon = '🕐';
+  
+  // Menos de 1 hora
+  if (diffMins < 60) {
+    timeText = `${diffMins} min`;
+    timeColor = '#10b981';
+    timeIcon = '🆕';
+  }
+  // Mismo día (menos de 24 horas)
+  else if (diffHours < 24) {
+    timeText = `${diffHours}h`;
+    timeColor = '#3b82f6';
+    timeIcon = '🕐';
+  }
+  // 1 día
+  else if (diffDays === 1) {
+    timeText = '1 día';
+    timeColor = '#f59e0b';
+    timeIcon = '📆';
+  }
+  // 2-7 días
+  else if (diffDays <= 7) {
+    timeText = `${diffDays} días`;
+    timeColor = '#f59e0b';
+    timeIcon = '📆';
+  }
+  // Más de 1 semana
+  else if (diffDays <= 30) {
+    const weeks = Math.floor(diffDays / 7);
+    timeText = weeks === 1 ? '1 semana' : `${weeks} semanas`;
+    timeColor = '#ef4444';
+    timeIcon = '⚠️';
+  }
+  // Más de 1 mes
+  else {
+    const months = Math.floor(diffDays / 30);
+    timeText = months === 1 ? '1 mes' : `${months} meses`;
+    timeColor = '#dc2626';
+    timeIcon = '🔴';
+  }
+  
+  return { timeText, timeColor, timeIcon };
+}
+
+/**
+ * Renderizar tarjeta individual en vista Kanban
+ */
 function renderCard(card) {
   const el = document.createElement('div');
   el.className = 'card-item';
@@ -426,6 +560,12 @@ function renderCard(card) {
     hour: '2-digit',
     minute: '2-digit'
   });
+  
+  // Calcular tiempo transcurrido
+  const elapsed = card.created_at ? getTimeElapsed(card.created_at) : null;
+  const elapsedBadge = elapsed 
+    ? `<span class="badge" style="background: ${elapsed.timeColor}; color: white; font-size: 0.65rem; font-weight: 600; padding: 0.25rem 0.5rem; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.15);">${elapsed.timeIcon} ${elapsed.timeText}</span>`
+    : '';
   
   const pointsBadge = card.story_points > 0
     ? `<span class="story-points-badge">${card.story_points} pts</span>`
@@ -478,6 +618,7 @@ function renderCard(card) {
       <div class="d-flex align-items-center gap-2 flex-wrap">
         <span class="badge" style="background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%); color: #fff; font-size: 0.72rem; font-weight: 700; padding: 0.3rem 0.6rem; border-radius: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.15);">#${card.id}</span>
         ${pointsBadge}
+        ${elapsedBadge}
       </div>
     </div>
     <div class="fw-bold mb-2" style="color: #111827; font-size: 0.95rem; line-height: 1.4;">${escapeHtml(card.title)}</div>
@@ -498,6 +639,14 @@ function renderCard(card) {
       </div>
     </div>
   `;
+
+  // Doble click para abrir modal de edición
+  el.addEventListener('dblclick', (e) => {
+    // Evitar que se active si se hace doble click en los botones
+    if (!e.target.closest('button')) {
+      openCardModal(card);
+    }
+  });
 
   el.addEventListener('dragstart', e => {
     el.classList.add('dragging');
@@ -1002,5 +1151,119 @@ fixDatePickerIcons();
 // Ejecutar cada vez que se abre un modal
 document.getElementById('cardModal').addEventListener('shown.bs.modal', fixDatePickerIcons);
 document.getElementById('sprintModal').addEventListener('shown.bs.modal', fixDatePickerIcons);
+
+// ==========================
+// FILTROS VISTA LISTA
+// ==========================
+
+// Función helper para obtener el lunes de la semana actual
+function getMondayOfCurrentWeek() {
+  const today = new Date();
+  const day = today.getDay();
+  const diff = today.getDate() - day + (day === 0 ? -6 : 1); // Ajustar cuando es domingo
+  const monday = new Date(today.setDate(diff));
+  monday.setHours(0, 0, 0, 0);
+  return monday;
+}
+
+// Función helper para obtener el sábado de la semana actual
+function getSaturdayOfCurrentWeek() {
+  const monday = getMondayOfCurrentWeek();
+  const saturday = new Date(monday);
+  saturday.setDate(monday.getDate() + 5); // Lunes + 5 días = Sábado
+  saturday.setHours(23, 59, 59, 999);
+  return saturday;
+}
+
+// Botón: Ayer
+document.getElementById('btnFiltroAyer')?.addEventListener('click', () => {
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  
+  const year = yesterday.getFullYear();
+  const month = String(yesterday.getMonth() + 1).padStart(2, '0');
+  const day = String(yesterday.getDate()).padStart(2, '0');
+  const dateStr = `${year}-${month}-${day}`;
+  
+  document.getElementById('filtroFechaInicio').value = dateStr;
+  document.getElementById('filtroFechaFin').value = dateStr;
+  
+  if (vistaActual === 'lista') {
+    renderListaView();
+  }
+});
+
+// Botón: Hoy
+document.getElementById('btnFiltroHoy')?.addEventListener('click', () => {
+  const today = new Date();
+  
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  const dateStr = `${year}-${month}-${day}`;
+  
+  document.getElementById('filtroFechaInicio').value = dateStr;
+  document.getElementById('filtroFechaFin').value = dateStr;
+  
+  if (vistaActual === 'lista') {
+    renderListaView();
+  }
+});
+
+// Botón: Esta Semana (Lunes a Sábado)
+document.getElementById('btnFiltroSemanaActual')?.addEventListener('click', () => {
+  const monday = getMondayOfCurrentWeek();
+  const saturday = getSaturdayOfCurrentWeek();
+  
+  document.getElementById('filtroFechaInicio').value = monday.toISOString().split('T')[0];
+  document.getElementById('filtroFechaFin').value = saturday.toISOString().split('T')[0];
+  
+  if (vistaActual === 'lista') {
+    renderListaView();
+  }
+});
+
+// Botón: Este Mes
+document.getElementById('btnFiltroMesActual')?.addEventListener('click', () => {
+  const today = new Date();
+  const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+  const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+  
+  document.getElementById('filtroFechaInicio').value = firstDay.toISOString().split('T')[0];
+  document.getElementById('filtroFechaFin').value = lastDay.toISOString().split('T')[0];
+  
+  if (vistaActual === 'lista') {
+    renderListaView();
+  }
+});
+
+// Botón: Limpiar Filtros
+document.getElementById('btnLimpiarFiltros')?.addEventListener('click', () => {
+  document.getElementById('filtroFechaInicio').value = '';
+  document.getElementById('filtroFechaFin').value = '';
+  document.getElementById('filtroEstado').value = '';
+  document.getElementById('filtroCategoria').value = '';
+  
+  if (vistaActual === 'lista') {
+    renderListaView();
+  }
+});
+
+// Aplicar filtros automáticamente cuando cambian
+document.getElementById('filtroFechaInicio')?.addEventListener('change', () => {
+  if (vistaActual === 'lista') renderListaView();
+});
+
+document.getElementById('filtroFechaFin')?.addEventListener('change', () => {
+  if (vistaActual === 'lista') renderListaView();
+});
+
+document.getElementById('filtroEstado')?.addEventListener('change', () => {
+  if (vistaActual === 'lista') renderListaView();
+});
+
+document.getElementById('filtroCategoria')?.addEventListener('change', () => {
+  if (vistaActual === 'lista') renderListaView();
+});
 
 load();

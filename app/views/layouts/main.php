@@ -58,7 +58,7 @@
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('/planificador/public/sw.js', {
+      navigator.serviceWorker.register('/planificador/sw.js', {
         scope: '/planificador/'
       })
         .then(registration => {

@@ -151,11 +151,12 @@ body {
   border-radius: 12px;
   padding: 14px;
   margin-bottom: 12px;
-  cursor: grab;
+  cursor: pointer;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.06);
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   overflow: hidden;
+  user-select: none;
 }
 
 .card-item::before {
@@ -182,7 +183,7 @@ body {
 
 .card-item.dragging {
   opacity: .6;
-  cursor: grabbing;
+  cursor: grabbing !important;
   transform: rotate(2deg);
 }
 
@@ -538,4 +539,42 @@ input[type="date"]::-moz-calendar-picker-indicator:hover {
 .bg-dark input[type="date"]::-webkit-calendar-picker-indicator,
 input[type="date"].bg-dark::-webkit-calendar-picker-indicator {
   filter: invert(1) brightness(1.8) !important;
+}
+
+/* Filtros Vista Lista */
+#vistaLista .form-label {
+  margin-bottom: 0.4rem;
+  font-size: 0.85rem;
+}
+
+#vistaLista .form-control,
+#vistaLista .form-select {
+  font-size: 0.9rem;
+  transition: all 0.2s ease;
+}
+
+#vistaLista .form-control:focus,
+#vistaLista .form-select:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 0.2rem rgba(59, 130, 246, 0.25);
+}
+
+#vistaLista .btn {
+  transition: all 0.2s ease;
+  font-weight: 600;
+}
+
+#vistaLista .btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+#vistaLista .btn-info {
+  background: linear-gradient(135deg, #22d3ee 0%, #06b6d4 100%);
+  border: none;
+  color: #0f172a;
+}
+
+#vistaLista .btn-info:hover {
+  background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
 }
