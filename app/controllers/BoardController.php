@@ -28,20 +28,41 @@ class BoardController extends BaseController {
             $boardId = (int)$this->get('board_id', 0);
         }
         
-        if (!$boardId) {
-            // Si no hay ID, obtener el primer tablero
-            $boards = $this->boardModel->getAll();
-            if (empty($boards)) {
-                // Si no hay tableros, crear uno por defecto
-                $boardId = $this->boardModel->create('Mi Tablero', 'Tablero principal', '#3b82f6');
-                
-                // Crear sprint inicial
-                $sprintModel = new Sprint();
-                $inicio = date('Y-m-d');
-                $fin = date('Y-m-d', strtotime('+14 days'));
-                $sprintModel->create($boardId, 'Sprint 1', $inicio, $fin, 'Primer sprint', 'activo');
-            } else {
-                $boardId = $boards[0]['id'];
+        // Si aún no hay boardId, obtener uno válido
+        if (!$boardId || !$this->boardModel->getById($boardId)) {
+            // Intentar obtener de la sesión
+            $boardId = $_SESSION['current_board'] ?? null;
+            
+            // Verificar que el tablero de la sesión existe
+            if ($boardId) {
+                $board = $this->boardModel->getById($boardId);
+                if (!$board) {
+                    $boardId = null;
+                }
+            }
+            
+            // Si todavía no tenemos un tablero válido
+            if (!$boardId) {
+                $boards = $this->boardModel->getAll();
+                if (empty($boards)) {
+                    // Si no hay tableros, crear uno por defecto
+                    $boardId = $this->boardModel->create('Mi Tablero', 'Tablero principal', '#3b82f6');
+                    
+                    // Crear listas por defecto
+                    $listModel = new CardList();
+                    $listModel->create($boardId, 'Por Hacer', 0, '#3b82f6');
+                    $listModel->create($boardId, 'En Progreso', 1, '#f59e0b');
+                    $listModel->create($boardId, 'Completado', 2, '#10b981');
+                    
+                    // Crear sprint inicial
+                    $sprintModel = new Sprint();
+                    $inicio = date('Y-m-d');
+                    $fin = date('Y-m-d', strtotime('+14 days'));
+                    $sprintModel->create($boardId, 'Sprint 1', $inicio, $fin, 'Primer sprint', 'activo');
+                } else {
+                    // Usar el primer tablero disponible
+                    $boardId = $boards[0]['id'];
+                }
             }
         }
         

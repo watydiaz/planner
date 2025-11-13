@@ -1,0 +1,9 @@
+RewriteEngine On
+
+# Si se pide un PNG que no existe, generar dinámicamente
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^icon-(\d+)x\1\.png$ icon.php?size=$1 [L]
+
+# Favicon
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^favicon\.png$ icon.php?size=48 [L]

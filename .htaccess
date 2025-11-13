@@ -1,5 +1,6 @@
 <IfModule mod_rewrite.c>
     RewriteEngine On
+    RewriteBase /planificador/
     
     # Evitar acceso directo a archivos del sistema
     RewriteRule ^config/ - [F,L]
@@ -7,7 +8,7 @@
     RewriteRule ^\.git/ - [F,L]
     
     # Permitir acceso directo a archivos de public
-    RewriteCond %{REQUEST_URI} ^/public/
+    RewriteCond %{REQUEST_URI} ^/planificador/public/
     RewriteRule ^ - [L]
     
     # Redirigir todo el tráfico a index.php (excepto archivos existentes)

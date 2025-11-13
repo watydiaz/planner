@@ -2,6 +2,8 @@
 
 Sistema completo de gestión de tareas basado en metodología Kanban con soporte para Sprints, tableros múltiples, bitácora de actividades y gestión de archivos adjuntos.
 
+**✨ Progressive Web App (PWA)** - Instálala en tu dispositivo para usarla como app nativa con soporte offline.
+
 ## 🚀 Características Principales
 
 - ✅ **Tableros Múltiples**: Gestiona diferentes proyectos o clientes
@@ -13,6 +15,7 @@ Sistema completo de gestión de tareas basado en metodología Kanban con soporte
 - 📅 **Gestión de Fechas**: Proyectos de corto y largo plazo
 - 🎯 **Categorización**: Organiza por tipo de trabajo (Soporte/Desarrollo)
 - 🔒 **Seguridad**: Protección CSRF, validación de archivos, sanitización XSS
+- 📱 **PWA**: Instalable en dispositivos móviles y desktop, funciona offline
 
 ## 📁 Estructura del Proyecto (MVC)
 
@@ -145,8 +148,40 @@ http://localhost/planificador
 2. **Gestionar Tareas**: Arrastrar y soltar entre columnas
 3. **Agregar Actividades**: Documentar procesos en bitácora
 4. **Crear Sprints**: Planificar ciclos de trabajo
+5. **Instalar como PWA**: En el navegador, busca el ícono de instalación (➕) para añadir la app a tu dispositivo
 
-## 🛠️ Mantenimiento
+## � Instalación PWA
+
+### Desktop (Chrome/Edge)
+1. Abre http://localhost/planificador/
+2. Haz clic en el ícono ➕ o ⋮ → "Instalar Planificador Kanban"
+3. La app se abrirá en una ventana independiente
+
+### Android
+1. Abre la app en Chrome
+2. Toca el menú ⋮ → "Añadir a pantalla de inicio"
+3. La app aparecerá como una app nativa
+
+### iOS (Safari)
+1. Abre la app en Safari
+2. Toca el botón Compartir
+3. Selecciona "Añadir a pantalla de inicio"
+
+### Generar Iconos PWA
+```bash
+# Opción 1: Abre el generador en el navegador
+open http://localhost/planificador/public/icons/generator.html
+
+# Opción 2: Usa el script Python
+cd public/icons
+pip install cairosvg pillow
+python generate_icons.py
+
+# Opción 3: Usa herramientas online
+# https://www.pwabuilder.com/imageGenerator
+```
+
+## �🛠️ Mantenimiento
 
 ### Backup
 ```bash
@@ -158,7 +193,17 @@ mysqldump -u usuario -p planificador_kanban > backup.sql
 find public/uploads -type f -mtime +30 -delete
 ```
 
+### Actualizar Service Worker
+Edita `public/sw.js` y cambia `CACHE_NAME` a una nueva versión.
+
 ## 📝 Changelog
+
+### v2.1 (Nov 2025)
+- ✨ PWA completa con soporte offline
+- 📱 Instalable en móviles y desktop
+- 🎨 Iconos personalizados generados
+- 🔄 Service Worker para caché
+- 📡 Funcionalidad offline básica
 
 ### v2.0 (Nov 2025)
 - Refactoring completo a MVC

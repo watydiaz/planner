@@ -5,6 +5,23 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?= htmlspecialchars($pageTitle ?? 'Planificador Kanban') ?></title>
   
+  <!-- PWA Meta Tags -->
+  <meta name="description" content="Aplicación de gestión de proyectos con tablero Kanban, sprints y bitácora de actividades">
+  <meta name="theme-color" content="#3b82f6">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Kanban">
+  
+  <!-- Manifest PWA -->
+  <link rel="manifest" href="/planificador/public/manifest.json">
+  
+  <!-- Favicons -->
+  <link rel="icon" type="image/png" sizes="192x192" href="/planificador/public/icons/icon-192x192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="/planificador/public/icons/icon-512x512.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/planificador/public/icons/icon-192x192.png">
+  <link rel="shortcut icon" href="/planificador/public/icons/favicon.png">
+  
   <!-- Bootstrap CSS -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   
@@ -36,6 +53,39 @@
   const ASSETS_URL = 'public';
 </script>
 <script src="public/js/app.js"></script>
+
+<!-- Service Worker Registration -->
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/planificador/public/sw.js', {
+        scope: '/planificador/'
+      })
+        .then(registration => {
+          console.log('✅ Service Worker registrado:', registration.scope);
+        })
+        .catch(error => {
+          console.log('❌ Error al registrar Service Worker:', error);
+        });
+    });
+  }
+
+  // Detectar cuando la app es instalable
+  let deferredPrompt;
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    
+    // Mostrar botón de instalación personalizado (opcional)
+    console.log('💡 La app se puede instalar');
+  });
+
+  // Detectar cuando la app fue instalada
+  window.addEventListener('appinstalled', () => {
+    console.log('✅ PWA instalada correctamente');
+    deferredPrompt = null;
+  });
+</script>
 
 </body>
 </html>
