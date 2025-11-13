@@ -275,10 +275,18 @@ function render(lists, cards) {
     col.className = `list ${fixedList.cssClass}`;
     col.dataset.listId = dbList.id;
 
+    const cardsInList = cardsByList[dbList.id] || [];
+    const cardCount = cardsInList.length;
+
     col.innerHTML = `
       <div class="list-header">
-        <div class="list-title">${escapeHtml(fixedList.title)}</div>
-        <button class="btn btn-sm btn-add-card">✨ Tarea</button>
+        <div class="d-flex align-items-center justify-content-between w-100">
+          <div class="d-flex align-items-center gap-2">
+            <span class="list-title">${escapeHtml(fixedList.title)}</span>
+            <span class="badge rounded-pill" style="background: rgba(59, 130, 246, 0.2); color: #60a5fa; font-size: 0.9rem; font-weight: 700; padding: 0.3rem 0.7rem;">${cardCount}</span>
+          </div>
+          <button class="btn btn-sm btn-add-card">✨ Tarea</button>
+        </div>
       </div>
       <div class="dropzone"></div>
     `;
