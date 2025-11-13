@@ -41,7 +41,14 @@ $action = $_GET['action'] ?? '';
 if ($action) {
     // Validar CSRF para todas las peticiones POST
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-        $sent = $_POST['csrf'] ?? (json_decode(file_get_contents('php://input'), true)['csrf'] ?? '');
+        // Leer input una sola vez y guardarlo para uso posterior
+        $rawInput = file_get_contents('php://input');
+        $inputData = json_decode($rawInput, true);
+        
+        // Guardar en global para que los controladores puedan acceder
+        $GLOBALS['request_input'] = $inputData;
+        
+        $sent = $_POST['csrf'] ?? ($inputData['csrf'] ?? '');
         if (!$sent || $sent !== $_SESSION['csrf']) {
             http_response_code(403);
             header('Content-Type: application/json');
@@ -121,6 +128,37 @@ if ($action) {
             case 'delete_activity':
                 $controller = new ActivityController();
                 $controller->delete();
+                break;
+
+            // AI endpoints
+            case 'ai_generar_descripcion':
+                $controller = new AIController();
+                $controller->generarDescripcion();
+                break;
+
+            case 'ai_estimar_complejidad':
+                $controller = new AIController();
+                $controller->estimarComplejidad();
+                break;
+
+            case 'ai_generar_subtareas':
+                $controller = new AIController();
+                $controller->generarSubtareas();
+                break;
+
+            case 'ai_sugerir_categoria':
+                $controller = new AIController();
+                $controller->sugerirCategoria();
+                break;
+
+            case 'ai_analizar_carga':
+                $controller = new AIController();
+                $controller->analizarCarga();
+                break;
+
+            case 'ai_chat':
+                $controller = new AIController();
+                $controller->chatAsistente();
                 break;
 
             default:

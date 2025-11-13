@@ -32,6 +32,7 @@
   
   <!-- Custom CSS -->
   <link rel="stylesheet" href="public/css/styles.css">
+  <link rel="stylesheet" href="public/css/ai-chat.css">
 </head>
 <body>
 
@@ -42,6 +43,7 @@
 </main>
 
 <?php include __DIR__ . '/../components/modals.php'; ?>
+<?php include __DIR__ . '/../components/chat-widget.php'; ?>
 
 <!-- Bootstrap JS -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
@@ -51,7 +53,11 @@
   const CSRF = <?= json_encode($csrf ?? '') ?>;
   const BASE_URL = '';
   const ASSETS_URL = 'public';
+  window.csrf = CSRF; // Global para AI Assistant
 </script>
+<script src="public/js/ai-cache.js"></script>
+<script src="public/js/ai-assistant.js"></script>
+<script src="public/js/ai-chat.js"></script>
 <script src="public/js/app.js"></script>
 
 <!-- Service Worker Registration -->

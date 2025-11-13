@@ -14,6 +14,39 @@ const elCardTitle = document.getElementById('cardTitle');
 const elCardDesc = document.getElementById('cardDesc');
 const elCardPoints = document.getElementById('cardPoints');
 const elCardCategoria = document.getElementById('cardCategoria');
+
+// Autocompletar IA al crear nueva tarea
+elCardTitle.addEventListener('change', async () => {
+  if (!elCardId.value && elCardTitle.value.trim().length > 3) {
+    // Solo si es nueva tarea y el título tiene más de 3 caracteres
+    // Descripción
+    if (!elCardDesc.value.trim()) {
+      elCardDesc.value = 'Generando descripción...';
+      try {
+        const desc = await window.AI.generarDescripcion(elCardTitle.value);
+        elCardDesc.value = desc;
+      } catch (e) {
+        elCardDesc.value = '';
+      }
+    }
+    // Story Points
+    if (elCardPoints.value === '0') {
+      try {
+        const points = await window.AI.estimarStoryPoints(elCardTitle.value);
+        if (points && points.story_points) {
+          elCardPoints.value = points.story_points;
+        }
+      } catch (e) {}
+    }
+    // Categoría
+    if (!elCardCategoria.value) {
+      try {
+        const cat = await window.AI.sugerirCategoria(elCardTitle.value);
+        if (cat) elCardCategoria.value = cat;
+      } catch (e) {}
+    }
+  }
+});
 const elCardProyectoLargo = document.getElementById('cardProyectoLargo');
 const elCardFechaInicio = document.getElementById('cardFechaInicio');
 const elCardFechaEntrega = document.getElementById('cardFechaEntrega');
@@ -225,14 +258,22 @@ function updateBoardSelector(boards, currentId) {
  * Actualizar estadísticas del sprint
  */
 function updateSprintStats(cards) {
-  if (!currentSprint) {
-    document.getElementById('sprintTitle').textContent = '🏃 Sin sprint activo';
-    document.getElementById('sprintObjetivo').textContent = '';
+  const sprintTitleEl = document.getElementById('sprintTitle');
+  const sprintObjetivoEl = document.getElementById('sprintObjetivo');
+  
+  // Si no existen los elementos (ej: en vista de Informe), salir
+  if (!sprintTitleEl || !sprintObjetivoEl) {
     return;
   }
   
-  document.getElementById('sprintTitle').textContent = `🏃 ${currentSprint.nombre}`;
-  document.getElementById('sprintObjetivo').textContent = currentSprint.objetivo || '';
+  if (!currentSprint) {
+    sprintTitleEl.textContent = '🏃 Sin sprint activo';
+    sprintObjetivoEl.textContent = '';
+    return;
+  }
+  
+  sprintTitleEl.textContent = `🏃 ${currentSprint.nombre}`;
+  sprintObjetivoEl.textContent = currentSprint.objetivo || '';
   
   const hoy = new Date();
   const fin = new Date(currentSprint.fecha_fin);
@@ -254,6 +295,26 @@ function updateSprintStats(cards) {
  */
 function render(lists, cards) {
   board.innerHTML = '';
+  
+  // 🤖 CALCULAR PRIORIDADES CON ALGORITMO IA
+  const tareasActivas = cards.filter(c => {
+    const list = lists.find(l => l.id === c.list_id);
+    return list && (list.title === 'Por Hacer' || list.title === 'En Progreso');
+  });
+  
+  const tareasConScore = tareasActivas.map(tarea => {
+    const list = lists.find(l => l.id === tarea.list_id);
+    const score = calcularScoreTarea(tarea, list);
+    return { ...tarea, score, list };
+  });
+  
+  tareasConScore.sort((a, b) => b.score.total - a.score.total);
+  
+  // Crear mapa de prioridades (id -> posición)
+  const prioridadMap = {};
+  tareasConScore.forEach((tarea, index) => {
+    prioridadMap[tarea.id] = index + 1;
+  });
   
   const fixedLists = [
     { id: 'pendiente', title: 'Por Hacer', cssClass: 'pendiente' },
@@ -294,7 +355,8 @@ function render(lists, cards) {
     const dz = col.querySelector('.dropzone');
 
     (cardsByList[dbList.id] || []).forEach(card => {
-      dz.appendChild(renderCard(card));
+      const prioridad = prioridadMap[card.id];
+      dz.appendChild(renderCard(card, prioridad));
     });
 
     setupDropzone(dz);
@@ -552,7 +614,7 @@ function getTimeElapsed(createdAt) {
 /**
  * Renderizar tarjeta individual en vista Kanban
  */
-function renderCard(card) {
+function renderCard(card, prioridad = null) {
   const el = document.createElement('div');
   el.className = 'card-item';
   el.draggable = true;
@@ -578,6 +640,42 @@ function renderCard(card) {
   const pointsBadge = card.story_points > 0
     ? `<span class="story-points-badge">${card.story_points} pts</span>`
     : '';
+  
+  // 🤖 BADGE DE PRIORIDAD IA
+  let prioridadBadge = '';
+  if (prioridad) {
+    let bgColor = '#fbbf24'; // Oro por defecto
+    let icon = '⭐';
+    let label = 'Hacer';
+    
+    if (prioridad === 1) {
+      bgColor = 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)';
+      icon = '🥇';
+      label = 'TOP';
+    } else if (prioridad === 2) {
+      bgColor = 'linear-gradient(135deg, #94a3b8 0%, #64748b 100%)';
+      icon = '🥈';
+      label = 'ALTA';
+    } else if (prioridad === 3) {
+      bgColor = 'linear-gradient(135deg, #cd7f32 0%, #b87333 100%)';
+      icon = '🥉';
+      label = 'ALTA';
+    } else if (prioridad <= 5) {
+      bgColor = 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)';
+      icon = '🎯';
+      label = 'Prio';
+    } else if (prioridad <= 10) {
+      bgColor = 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)';
+      icon = '📌';
+      label = 'Hacer';
+    } else {
+      bgColor = 'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)';
+      icon = '📋';
+      label = 'Normal';
+    }
+    
+    prioridadBadge = `<span class="badge text-white" style="background: ${bgColor}; font-size: 0.7rem; font-weight: 700; padding: 0.35rem 0.6rem; border-radius: 6px; box-shadow: 0 3px 8px rgba(0,0,0,0.25); animation: pulse 2s ease-in-out infinite;">${icon} #${prioridad} ${label}</span>`;
+  }
   
   let categoriaBadge = '';
   if (card.categoria === 'soporte') {
@@ -628,6 +726,7 @@ function renderCard(card) {
         ${pointsBadge}
         ${elapsedBadge}
       </div>
+      ${prioridad ? `<div>${prioridadBadge}</div>` : ''}
     </div>
     <div class="fw-bold mb-2" style="color: #111827; font-size: 0.95rem; line-height: 1.4;">${escapeHtml(card.title)}</div>
     ${card.description ? `<div class="small mb-2" style="color: #6b7280; line-height: 1.5;">${escapeHtml(card.description)}</div>` : ''}
@@ -1273,5 +1372,833 @@ document.getElementById('filtroEstado')?.addEventListener('change', () => {
 document.getElementById('filtroCategoria')?.addEventListener('change', () => {
   if (vistaActual === 'lista') renderListaView();
 });
+
+// ====================================
+// VISTA INFORME
+// ====================================
+
+// Toggle Vista Kanban
+document.getElementById('btnVistaKanban')?.addEventListener('click', () => {
+  vistaActual = 'kanban';
+  const boardElement = document.getElementById('board');
+  boardElement.style.display = '';
+  boardElement.classList.add('kanban');
+  document.getElementById('vistaLista').style.display = 'none';
+  document.getElementById('vistaInforme').style.display = 'none';
+  
+  document.getElementById('btnVistaKanban').classList.add('active');
+  document.getElementById('btnVistaKanban').classList.remove('btn-outline-primary');
+  document.getElementById('btnVistaKanban').classList.add('btn-primary');
+  document.getElementById('btnVistaKanban').style.background = 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)';
+  
+  document.getElementById('btnVistaLista').classList.remove('active');
+  document.getElementById('btnVistaLista').classList.add('btn-outline-primary');
+  document.getElementById('btnVistaLista').classList.remove('btn-primary');
+  document.getElementById('btnVistaLista').style.background = '';
+  
+  document.getElementById('btnVistaInforme').classList.remove('active');
+  document.getElementById('btnVistaInforme').classList.add('btn-outline-primary');
+  document.getElementById('btnVistaInforme').classList.remove('btn-primary');
+  document.getElementById('btnVistaInforme').style.background = '';
+});
+
+// Toggle Vista Lista
+document.getElementById('btnVistaLista')?.addEventListener('click', () => {
+  vistaActual = 'lista';
+  document.getElementById('board').style.display = 'none';
+  document.getElementById('vistaLista').style.display = 'block';
+  document.getElementById('vistaInforme').style.display = 'none';
+  
+  document.getElementById('btnVistaLista').classList.add('active');
+  document.getElementById('btnVistaLista').classList.remove('btn-outline-primary');
+  document.getElementById('btnVistaLista').classList.add('btn-primary');
+  document.getElementById('btnVistaLista').style.background = 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)';
+  
+  document.getElementById('btnVistaKanban').classList.remove('active');
+  document.getElementById('btnVistaKanban').classList.add('btn-outline-primary');
+  document.getElementById('btnVistaKanban').classList.remove('btn-primary');
+  document.getElementById('btnVistaKanban').style.background = '';
+  
+  document.getElementById('btnVistaInforme').classList.remove('active');
+  document.getElementById('btnVistaInforme').classList.add('btn-outline-primary');
+  document.getElementById('btnVistaInforme').classList.remove('btn-primary');
+  document.getElementById('btnVistaInforme').style.background = '';
+  
+  renderListaView();
+});
+
+// Toggle Vista Informe
+document.getElementById('btnVistaInforme')?.addEventListener('click', () => {
+  vistaActual = 'informe';
+  document.getElementById('board').style.display = 'none';
+  document.getElementById('vistaLista').style.display = 'none';
+  document.getElementById('vistaInforme').style.display = 'block';
+  
+  document.getElementById('btnVistaInforme').classList.add('active');
+  document.getElementById('btnVistaInforme').classList.remove('btn-outline-primary');
+  document.getElementById('btnVistaInforme').classList.add('btn-primary');
+  document.getElementById('btnVistaInforme').style.background = 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)';
+  
+  document.getElementById('btnVistaKanban').classList.remove('active');
+  document.getElementById('btnVistaKanban').classList.add('btn-outline-primary');
+  document.getElementById('btnVistaKanban').classList.remove('btn-primary');
+  document.getElementById('btnVistaKanban').style.background = '';
+  
+  document.getElementById('btnVistaLista').classList.remove('active');
+  document.getElementById('btnVistaLista').classList.add('btn-outline-primary');
+  document.getElementById('btnVistaLista').classList.remove('btn-primary');
+  document.getElementById('btnVistaLista').style.background = '';
+  
+  renderInformeView();
+});
+
+/**
+ * Renderizar vista de informe con estadísticas y insights
+ */
+function renderInformeView() {
+  if (!allCards || !allLists) return;
+  
+  // Calcular estadísticas básicas
+  const totalTareas = allCards.length;
+  const completadas = allCards.filter(c => {
+    const list = allLists.find(l => l.id === c.list_id);
+    return list && list.title === 'Completado';
+  }).length;
+  
+  const enProgreso = allCards.filter(c => {
+    const list = allLists.find(l => l.id === c.list_id);
+    return list && list.title === 'En Progreso';
+  }).length;
+  
+  const pendientes = allCards.filter(c => {
+    const list = allLists.find(l => l.id === c.list_id);
+    return list && list.title === 'Por Hacer';
+  }).length;
+  
+  const tasaCompletitud = totalTareas > 0 ? Math.round((completadas / totalTareas) * 100) : 0;
+  
+  // Actualizar tarjetas de resumen
+  document.getElementById('statTotalTareas').textContent = totalTareas;
+  document.getElementById('statCompletadas').textContent = completadas;
+  document.getElementById('statEnProgreso').textContent = enProgreso;
+  document.getElementById('statTasaCompletitud').textContent = tasaCompletitud + '%';
+  
+  // Actualizar distribución por estado
+  document.getElementById('statPendientes').textContent = pendientes;
+  document.getElementById('statEnProgresoDetalle').textContent = enProgreso;
+  document.getElementById('statCompletadasDetalle').textContent = completadas;
+  
+  // Actualizar barra de progreso general
+  document.getElementById('progresoGeneral').textContent = tasaCompletitud + '%';
+  const barraProgreso = document.getElementById('barraProgresoGeneral');
+  barraProgreso.style.width = tasaCompletitud + '%';
+  barraProgreso.textContent = tasaCompletitud + '%';
+  barraProgreso.setAttribute('aria-valuenow', tasaCompletitud);
+  
+  // Calcular story points
+  const puntosTotales = allCards.reduce((sum, c) => sum + (parseInt(c.story_points) || 0), 0);
+  const puntosCompletados = allCards.filter(c => {
+    const list = allLists.find(l => l.id === c.list_id);
+    return list && list.title === 'Completado';
+  }).reduce((sum, c) => sum + (parseInt(c.story_points) || 0), 0);
+  
+  const tasaPuntos = puntosTotales > 0 ? Math.round((puntosCompletados / puntosTotales) * 100) : 0;
+  
+  document.getElementById('puntosCompletadosInforme').textContent = puntosCompletados;
+  document.getElementById('puntosTotalesInforme').textContent = puntosTotales;
+  
+  const barraPuntos = document.getElementById('barraPuntos');
+  barraPuntos.style.width = tasaPuntos + '%';
+  barraPuntos.textContent = tasaPuntos + '%';
+  barraPuntos.setAttribute('aria-valuenow', tasaPuntos);
+  
+  // Generar insights IA
+  generarInsights(totalTareas, completadas, enProgreso, pendientes, tasaCompletitud);
+  
+  // Generar categorías
+  generarCategorias();
+  
+  // Generar productividad diaria
+  generarProductividadDiaria();
+  
+  // Generar tareas atrasadas
+  generarTareasAtrasadas();
+  
+  // Generar recomendaciones
+  generarRecomendaciones(totalTareas, completadas, enProgreso, pendientes, tasaCompletitud);
+  
+  // Generar plan de acción inteligente
+  generarPlanAccion();
+}
+
+/**
+ * Generar insights con IA
+ */
+function generarInsights(total, completadas, enProgreso, pendientes, tasa) {
+  const container = document.getElementById('insightsContainer');
+  const insights = [];
+  
+  // Análisis de tasa de completitud
+  if (tasa >= 80) {
+    insights.push({
+      icon: '🔥',
+      title: '¡Excelente Ritmo!',
+      text: `Tu tasa de completitud es del ${tasa}%. ¡Sigue así!`,
+      color: '#10b981'
+    });
+  } else if (tasa >= 50) {
+    insights.push({
+      icon: '💪',
+      title: 'Buen Progreso',
+      text: `Vas por buen camino con un ${tasa}% completado. Puedes mejorar un poco más.`,
+      color: '#f59e0b'
+    });
+  } else {
+    insights.push({
+      icon: '⚠️',
+      title: 'Necesitas Enfocarte',
+      text: `Solo un ${tasa}% completado. Prioriza tus tareas pendientes.`,
+      color: '#ef4444'
+    });
+  }
+  
+  // Análisis de tareas en progreso
+  if (enProgreso > 5) {
+    insights.push({
+      icon: '🎯',
+      title: 'Demasiadas Tareas en Paralelo',
+      text: `Tienes ${enProgreso} tareas en progreso. Intenta enfocarte en menos tareas a la vez.`,
+      color: '#f59e0b'
+    });
+  } else if (enProgreso === 0 && pendientes > 0) {
+    insights.push({
+      icon: '🚀',
+      title: 'Comienza Algo Nuevo',
+      text: 'No tienes tareas en progreso. ¡Es momento de empezar!',
+      color: '#3b82f6'
+    });
+  }
+  
+  // Análisis de pendientes
+  if (pendientes === 0 && completadas > 0) {
+    insights.push({
+      icon: '🎉',
+      title: '¡Todo Limpio!',
+      text: 'No tienes tareas pendientes. ¡Increíble trabajo!',
+      color: '#10b981'
+    });
+  } else if (pendientes > 10) {
+    insights.push({
+      icon: '📋',
+      title: 'Backlog Grande',
+      text: `Tienes ${pendientes} tareas pendientes. Considera dividirlas en sprints.`,
+      color: '#6366f1'
+    });
+  }
+  
+  // Velocidad (story points por tarea)
+  const puntosPromedio = total > 0 ? (allCards.reduce((sum, c) => sum + (parseInt(c.story_points) || 0), 0) / total).toFixed(1) : 0;
+  insights.push({
+    icon: '⚡',
+    title: 'Complejidad Promedio',
+    text: `Tus tareas tienen en promedio ${puntosPromedio} story points.`,
+    color: '#8b5cf6'
+  });
+  
+  // Renderizar insights
+  container.innerHTML = insights.map(insight => `
+    <div class="mb-3 p-3" style="background: rgba(255, 255, 255, 0.05); border-radius: 12px; border-left: 4px solid ${insight.color};">
+      <div class="d-flex align-items-start gap-2">
+        <span style="font-size: 1.5rem;">${insight.icon}</span>
+        <div class="flex-grow-1">
+          <div class="fw-bold text-light mb-1">${insight.title}</div>
+          <div class="small text-secondary">${insight.text}</div>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+/**
+ * Generar distribución de categorías
+ */
+function generarCategorias() {
+  const container = document.getElementById('categoriasContainer');
+  
+  const categorias = {
+    'soporte': { count: 0, icon: '🛠️', name: 'Soporte', color: '#3b82f6' },
+    'desarrollo': { count: 0, icon: '💻', name: 'Desarrollo', color: '#8b5cf6' },
+    'reunion': { count: 0, icon: '👥', name: 'Reunión', color: '#f59e0b' },
+    'bug': { count: 0, icon: '🐛', name: 'Bug', color: '#ef4444' },
+    'otros': { count: 0, icon: '📌', name: 'Sin Categoría', color: '#6b7280' }
+  };
+  
+  allCards.forEach(card => {
+    const cat = card.categoria || 'otros';
+    if (categorias[cat]) {
+      categorias[cat].count++;
+    } else {
+      categorias.otros.count++;
+    }
+  });
+  
+  const total = allCards.length;
+  
+  container.innerHTML = Object.entries(categorias)
+    .filter(([_, cat]) => cat.count > 0)
+    .sort((a, b) => b[1].count - a[1].count)
+    .map(([key, cat]) => {
+      const porcentaje = total > 0 ? Math.round((cat.count / total) * 100) : 0;
+      return `
+        <div class="mb-3">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <span class="text-light fw-semibold">${cat.icon} ${cat.name}</span>
+            <span class="text-light fw-bold">${cat.count} (${porcentaje}%)</span>
+          </div>
+          <div class="progress" style="height: 12px; border-radius: 6px; background: rgba(148, 163, 184, 0.2);">
+            <div class="progress-bar" role="progressbar" style="width: ${porcentaje}%; background: ${cat.color};" aria-valuenow="${porcentaje}" aria-valuemin="0" aria-valuemax="100"></div>
+          </div>
+        </div>
+      `;
+    }).join('');
+}
+
+/**
+ * Generar productividad diaria últimos 7 días
+ */
+function generarProductividadDiaria() {
+  const container = document.getElementById('productividadDiariaContainer');
+  
+  // Obtener tareas completadas con fecha de actualización
+  const tareasConFecha = allCards.filter(c => {
+    const list = allLists.find(l => l.id === c.list_id);
+    return list && list.title === 'Completado' && c.updated_at;
+  });
+  
+  // Agrupar por día (últimos 7 días)
+  const hoy = new Date();
+  const dias = [];
+  
+  for (let i = 6; i >= 0; i--) {
+    const fecha = new Date(hoy);
+    fecha.setDate(fecha.getDate() - i);
+    fecha.setHours(0, 0, 0, 0);
+    
+    const fechaStr = fecha.toISOString().split('T')[0];
+    const diaStr = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'][fecha.getDay()];
+    
+    const tareasDelDia = tareasConFecha.filter(t => {
+      const updated = new Date(t.updated_at);
+      updated.setHours(0, 0, 0, 0);
+      return updated.toISOString().split('T')[0] === fechaStr;
+    }).length;
+    
+    dias.push({ dia: diaStr, fecha: fechaStr, count: tareasDelDia });
+  }
+  
+  const maxCount = Math.max(...dias.map(d => d.count), 1);
+  
+  container.innerHTML = `
+    <div class="d-flex justify-content-between align-items-end gap-2" style="height: 150px;">
+      ${dias.map(d => {
+        const altura = (d.count / maxCount) * 100;
+        const esHoy = d.fecha === hoy.toISOString().split('T')[0];
+        return `
+          <div class="text-center flex-grow-1">
+            <div class="d-flex align-items-end justify-content-center" style="height: 120px;">
+              <div class="w-100" style="height: ${altura}%; background: ${esHoy ? 'linear-gradient(180deg, #3b82f6, #2563eb)' : 'linear-gradient(180deg, #6b7280, #4b5563)'}; border-radius: 6px 6px 0 0; min-height: 5px; position: relative;">
+                ${d.count > 0 ? `<div style="position: absolute; top: -20px; left: 50%; transform: translateX(-50%); font-size: 12px; font-weight: 700; color: #e2e8f0;">${d.count}</div>` : ''}
+              </div>
+            </div>
+            <div class="small text-secondary mt-2 fw-semibold">${d.dia}</div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
+/**
+ * Generar tareas atrasadas
+ */
+function generarTareasAtrasadas() {
+  const container = document.getElementById('tareasAtrasadasContainer');
+  const section = document.getElementById('tareasAtrasadasSection');
+  
+  const hoy = new Date();
+  hoy.setHours(0, 0, 0, 0);
+  
+  const atrasadas = allCards.filter(c => {
+    const list = allLists.find(l => l.id === c.list_id);
+    if (!list || list.title === 'Completado') return false;
+    
+    if (c.fecha_entrega) {
+      const vencimiento = new Date(c.fecha_entrega);
+      vencimiento.setHours(0, 0, 0, 0);
+      return vencimiento < hoy;
+    }
+    return false;
+  });
+  
+  if (atrasadas.length === 0) {
+    section.style.display = 'none';
+    return;
+  }
+  
+  section.style.display = 'block';
+  
+  container.innerHTML = atrasadas.map(tarea => {
+    const diasAtrasado = Math.floor((hoy - new Date(tarea.fecha_entrega)) / (1000 * 60 * 60 * 24));
+    const list = allLists.find(l => l.id === tarea.list_id);
+    
+    return `
+      <div class="col-md-6">
+        <div class="card bg-dark border-danger" style="border-radius: 12px;">
+          <div class="card-body p-3">
+            <h6 class="card-title text-light mb-2">${tarea.title}</h6>
+            <div class="d-flex justify-content-between align-items-center">
+              <span class="badge bg-danger">${diasAtrasado} día(s) de retraso</span>
+              <span class="badge" style="background: #f59e0b;">${list?.title || 'Sin estado'}</span>
+            </div>
+            <div class="mt-2 small text-secondary">
+              Vencimiento: ${new Date(tarea.fecha_entrega).toLocaleDateString()}
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+/**
+ * Generar recomendaciones personalizadas
+ */
+function generarRecomendaciones(total, completadas, enProgreso, pendientes, tasa) {
+  const container = document.getElementById('recomendacionesContainer');
+  const recomendaciones = [];
+  
+  // Recomendación 1: Enfoque
+  if (enProgreso > 3) {
+    recomendaciones.push({
+      icon: '🎯',
+      title: 'Reduce el Multitasking',
+      text: 'Tienes demasiadas tareas en progreso. La ciencia demuestra que enfocarse en 1-3 tareas aumenta la productividad en un 40%.',
+      action: 'Completa 2 tareas antes de empezar nuevas',
+      color: '#f59e0b'
+    });
+  }
+  
+  // Recomendación 2: Priorización
+  if (pendientes > 5 && tasa < 50) {
+    recomendaciones.push({
+      icon: '🚀',
+      title: 'Aplica la Regla 80/20',
+      text: 'El 20% de tus tareas generarán el 80% de resultados. Identifica las tareas de mayor impacto.',
+      action: 'Marca 2-3 tareas críticas y hazlas primero',
+      color: '#8b5cf6'
+    });
+  }
+  
+  // Recomendación 3: Momentum
+  if (completadas > 0 && tasa >= 50) {
+    recomendaciones.push({
+      icon: '⚡',
+      title: 'Mantén el Momentum',
+      text: '¡Vas muy bien! Los estudios muestran que completar tareas libera dopamina y te motiva a seguir.',
+      action: 'Completa 1 tarea pequeña ahora para seguir el impulso',
+      color: '#10b981'
+    });
+  }
+  
+  // Recomendación 4: Bloqueo de tiempo
+  if (enProgreso > 0) {
+    recomendaciones.push({
+      icon: '⏰',
+      title: 'Usa Time Blocking',
+      text: 'Dedica bloques de 90 minutos sin interrupciones a tus tareas en progreso. Es la técnica favorita de Elon Musk.',
+      action: 'Agenda tu próximo bloque de trabajo profundo',
+      color: '#3b82f6'
+    });
+  }
+  
+  // Recomendación 5: Descanso
+  if (completadas >= 3) {
+    recomendaciones.push({
+      icon: '🧘',
+      title: 'Toma un Descanso',
+      text: 'Has completado varias tareas. Los descansos de 5-10 minutos mejoran la concentración en un 30%.',
+      action: 'Respira, camina o estírate antes de continuar',
+      color: '#06b6d4'
+    });
+  }
+  
+  // Recomendación 6: Siguiente acción
+  if (pendientes > 0) {
+    const siguienteTarea = allCards.find(c => {
+      const list = allLists.find(l => l.id === c.list_id);
+      return list && list.title === 'Por Hacer';
+    });
+    
+    if (siguienteTarea) {
+      recomendaciones.push({
+        icon: '✨',
+        title: 'Tu Próxima Acción',
+        text: `"${siguienteTarea.title}" - Comienza con esto y genera impulso.`,
+        action: 'Muévela a "En Progreso" ahora',
+        color: '#f59e0b'
+      });
+    }
+  }
+  
+  container.innerHTML = recomendaciones.slice(0, 4).map(rec => `
+    <div class="col-md-6">
+      <div class="card bg-dark border-0" style="border-radius: 12px; border-left: 4px solid ${rec.color};">
+        <div class="card-body p-3">
+          <div class="d-flex align-items-start gap-3 mb-2">
+            <span style="font-size: 2rem;">${rec.icon}</span>
+            <div class="flex-grow-1">
+              <h6 class="text-light fw-bold mb-2">${rec.title}</h6>
+              <p class="text-secondary small mb-2">${rec.text}</p>
+              <div class="d-flex align-items-center gap-2">
+                <span class="badge" style="background: ${rec.color};">💡 ${rec.action}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+/**
+ * 🤖 MOTOR DE RECOMENDACIÓN INTELIGENTE
+ * Algoritmo multi-factor que analiza y prioriza tareas
+ */
+function generarPlanAccion() {
+  const container = document.getElementById('planAccionContainer');
+  
+  // Obtener tareas pendientes y en progreso
+  const tareasActivas = allCards.filter(c => {
+    const list = allLists.find(l => l.id === c.list_id);
+    return list && (list.title === 'Por Hacer' || list.title === 'En Progreso');
+  });
+  
+  if (tareasActivas.length === 0) {
+    container.innerHTML = `
+      <div class="text-center py-5">
+        <div style="font-size: 4rem;">🎉</div>
+        <h4 class="text-light mt-3">¡Felicidades! No tienes tareas pendientes</h4>
+        <p class="text-secondary">Es momento de crear nuevas metas o disfrutar un merecido descanso.</p>
+      </div>
+    `;
+    return;
+  }
+  
+  // Calcular score para cada tarea usando algoritmo multi-factor
+  const tareasConScore = tareasActivas.map(tarea => {
+    const list = allLists.find(l => l.id === tarea.list_id);
+    const score = calcularScoreTarea(tarea, list);
+    return { ...tarea, score, list };
+  });
+  
+  // Ordenar por score (mayor primero)
+  tareasConScore.sort((a, b) => b.score.total - a.score.total);
+  
+  // Tomar las top 5 tareas recomendadas
+  const topTareas = tareasConScore.slice(0, 5);
+  
+  // Generar HTML
+  container.innerHTML = `
+    <div class="row g-3">
+      ${topTareas.map((tarea, index) => generarTareaCard(tarea, index)).join('')}
+    </div>
+    
+    <!-- Explicación del algoritmo -->
+    <div class="mt-4 p-3" style="background: rgba(148, 163, 184, 0.05); border-radius: 12px; border: 1px solid rgba(148, 163, 184, 0.2);">
+      <div class="d-flex align-items-start gap-2">
+        <span style="font-size: 1.2rem;">ℹ️</span>
+        <div class="flex-grow-1">
+          <strong class="text-light small">¿Cómo funciona el algoritmo?</strong>
+          <p class="mb-0 small text-secondary mt-1">
+            El sistema analiza múltiples factores: <strong>Urgencia</strong> (fecha límite), 
+            <strong>Impacto</strong> (story points), <strong>Estado actual</strong> (en progreso = prioridad), 
+            <strong>Tiempo sin atención</strong> (antigüedad), <strong>Tipo de tarea</strong> (bugs = urgente), 
+            y <strong>Momentum</strong> (completar lo que ya empezaste). Cada factor aporta puntos que determinan el orden óptimo.
+          </p>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * Calcular score de prioridad para una tarea
+ * Algoritmo multi-factor sistémico
+ */
+function calcularScoreTarea(tarea, list) {
+  let score = {
+    urgencia: 0,
+    impacto: 0,
+    estado: 0,
+    antiguedad: 0,
+    tipo: 0,
+    total: 0
+  };
+  
+  // 1. URGENCIA - Fecha de entrega (40 puntos máx)
+  if (tarea.fecha_entrega) {
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
+    const vencimiento = new Date(tarea.fecha_entrega);
+    vencimiento.setHours(0, 0, 0, 0);
+    const diasRestantes = Math.ceil((vencimiento - hoy) / (1000 * 60 * 60 * 24));
+    
+    if (diasRestantes < 0) {
+      score.urgencia = 40; // Atrasada = máxima prioridad
+    } else if (diasRestantes === 0) {
+      score.urgencia = 38; // Hoy
+    } else if (diasRestantes <= 2) {
+      score.urgencia = 35; // 1-2 días
+    } else if (diasRestantes <= 7) {
+      score.urgencia = 25; // Esta semana
+    } else if (diasRestantes <= 14) {
+      score.urgencia = 15; // Próximas 2 semanas
+    } else {
+      score.urgencia = 5; // Más de 2 semanas
+    }
+  } else {
+    score.urgencia = 10; // Sin fecha = prioridad media-baja
+  }
+  
+  // 2. IMPACTO - Story Points (30 puntos máx)
+  const points = parseInt(tarea.story_points) || 0;
+  if (points === 0) {
+    score.impacto = 5; // Sin estimar
+  } else if (points <= 2) {
+    score.impacto = 25; // Rápidas = hazlas YA (quick wins)
+  } else if (points === 3) {
+    score.impacto = 20; // Media
+  } else if (points === 5) {
+    score.impacto = 15; // Compleja
+  } else {
+    score.impacto = 10; // Muy compleja = dividir
+  }
+  
+  // 3. ESTADO - Ya en progreso (20 puntos máx)
+  if (list && list.title === 'En Progreso') {
+    score.estado = 20; // Termina lo que empezaste (momentum)
+  } else {
+    score.estado = 0;
+  }
+  
+  // 4. ANTIGÜEDAD - Tiempo sin atención (15 puntos máx)
+  if (tarea.created_at) {
+    const creacion = new Date(tarea.created_at);
+    const hoy = new Date();
+    const diasVida = Math.floor((hoy - creacion) / (1000 * 60 * 60 * 24));
+    
+    if (diasVida > 30) {
+      score.antiguedad = 15; // Más de 1 mes = atención
+    } else if (diasVida > 14) {
+      score.antiguedad = 10; // Más de 2 semanas
+    } else if (diasVida > 7) {
+      score.antiguedad = 5; // Más de 1 semana
+    } else {
+      score.antiguedad = 2; // Reciente
+    }
+  }
+  
+  // 5. TIPO - Categoría de tarea (15 puntos máx)
+  switch (tarea.categoria) {
+    case 'bug':
+      score.tipo = 15; // Bugs = prioridad alta
+      break;
+    case 'soporte':
+      score.tipo = 12; // Soporte = importante
+      break;
+    case 'desarrollo':
+      score.tipo = 8; // Desarrollo = normal
+      break;
+    case 'reunion':
+      score.tipo = 5; // Reuniones = pueden esperar
+      break;
+    default:
+      score.tipo = 7; // Sin categoría
+  }
+  
+  // 6. PROYECTO LARGO - Bonus si es proyecto estratégico
+  if (tarea.es_proyecto_largo == 1) {
+    score.tipo += 5; // Bonus proyectos importantes
+  }
+  
+  // CALCULAR TOTAL
+  score.total = score.urgencia + score.impacto + score.estado + score.antiguedad + score.tipo;
+  
+  return score;
+}
+
+/**
+ * Generar card HTML para tarea recomendada
+ */
+function generarTareaCard(tarea, index) {
+  const medals = ['🥇', '🥈', '🥉', '🏅', '🎯'];
+  const colors = ['#fbbf24', '#94a3b8', '#cd7f32', '#3b82f6', '#8b5cf6'];
+  const priorities = ['CRÍTICA', 'ALTA', 'ALTA', 'MEDIA', 'MEDIA'];
+  
+  const medal = medals[index] || '📌';
+  const color = colors[index] || '#6b7280';
+  const priority = priorities[index] || 'NORMAL';
+  
+  // Calcular días restantes si tiene fecha
+  let tiempoInfo = '';
+  if (tarea.fecha_entrega) {
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
+    const vencimiento = new Date(tarea.fecha_entrega);
+    vencimiento.setHours(0, 0, 0, 0);
+    const dias = Math.ceil((vencimiento - hoy) / (1000 * 60 * 60 * 24));
+    
+    if (dias < 0) {
+      tiempoInfo = `<span class="badge bg-danger">⏰ Atrasada ${Math.abs(dias)} día(s)</span>`;
+    } else if (dias === 0) {
+      tiempoInfo = `<span class="badge bg-warning text-dark">⚡ Vence HOY</span>`;
+    } else if (dias <= 2) {
+      tiempoInfo = `<span class="badge bg-warning text-dark">⏳ ${dias} día(s)</span>`;
+    } else if (dias <= 7) {
+      tiempoInfo = `<span class="badge bg-info">📅 ${dias} días</span>`;
+    } else {
+      tiempoInfo = `<span class="badge bg-secondary">📆 ${dias} días</span>`;
+    }
+  }
+  
+  // Badge de categoría
+  const categoriasIcons = {
+    'soporte': '🛠️ Soporte',
+    'desarrollo': '💻 Desarrollo',
+    'reunion': '👥 Reunión',
+    'bug': '🐛 Bug'
+  };
+  const categoriaText = categoriasIcons[tarea.categoria] || '📌 General';
+  
+  // Estado actual
+  const estadoBadge = tarea.list?.title === 'En Progreso' 
+    ? '<span class="badge bg-success">🔄 En Progreso</span>'
+    : '<span class="badge bg-primary">⏳ Pendiente</span>';
+  
+  // Story points
+  const pointsText = tarea.story_points > 0 
+    ? `${tarea.story_points} pts` 
+    : 'Sin estimar';
+  
+  // Desglose del score
+  const scoreBreakdown = `
+    <div class="small text-secondary mt-2">
+      <strong class="text-light">Score: ${tarea.score.total}</strong> pts
+      <div class="mt-1" style="font-size: 0.75rem;">
+        Urgencia: ${tarea.score.urgencia} | 
+        Impacto: ${tarea.score.impacto} | 
+        Estado: ${tarea.score.estado} | 
+        Antigüedad: ${tarea.score.antiguedad} | 
+        Tipo: ${tarea.score.tipo}
+      </div>
+    </div>
+  `;
+  
+  // Razón de recomendación
+  let razon = '';
+  if (tarea.score.urgencia >= 35) {
+    razon = '<div class="alert alert-danger p-2 mt-2 mb-0 small">🚨 <strong>Urgente:</strong> Vence pronto o está atrasada</div>';
+  } else if (tarea.score.estado === 20) {
+    razon = '<div class="alert alert-success p-2 mt-2 mb-0 small">⚡ <strong>Momentum:</strong> Ya la empezaste, termínala ahora</div>';
+  } else if (tarea.score.impacto >= 25) {
+    razon = '<div class="alert alert-info p-2 mt-2 mb-0 small">🎯 <strong>Quick Win:</strong> Tarea rápida, gana momentum</div>';
+  } else if (tarea.score.tipo >= 15) {
+    razon = '<div class="alert alert-warning p-2 mt-2 mb-0 small">🐛 <strong>Bug Crítico:</strong> Afecta a usuarios</div>';
+  } else if (tarea.score.antiguedad >= 15) {
+    razon = '<div class="alert alert-secondary p-2 mt-2 mb-0 small">⏰ <strong>Olvidada:</strong> Lleva más de 1 mes pendiente</div>';
+  }
+  
+  return `
+    <div class="col-12">
+      <div class="card bg-dark border-0" style="border-left: 5px solid ${color}; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">
+        <div class="card-body p-3">
+          <div class="d-flex align-items-start gap-3">
+            <!-- Medalla de posición -->
+            <div class="text-center" style="min-width: 60px;">
+              <div style="font-size: 2.5rem;">${medal}</div>
+              <div class="badge" style="background: ${color}; font-size: 0.7rem;">#${index + 1}</div>
+            </div>
+            
+            <!-- Contenido de la tarea -->
+            <div class="flex-grow-1">
+              <div class="d-flex justify-content-between align-items-start mb-2">
+                <h6 class="text-light mb-0 fw-bold">${tarea.title}</h6>
+                <span class="badge" style="background: ${color};">${priority}</span>
+              </div>
+              
+              ${tarea.description ? `<p class="text-secondary small mb-2">${tarea.description.substring(0, 100)}${tarea.description.length > 100 ? '...' : ''}</p>` : ''}
+              
+              <div class="d-flex flex-wrap gap-2 mb-2">
+                ${estadoBadge}
+                <span class="badge bg-secondary">${categoriaText}</span>
+                <span class="badge bg-info">${pointsText}</span>
+                ${tiempoInfo}
+              </div>
+              
+              ${razon}
+              ${scoreBreakdown}
+              
+              <!-- Acciones -->
+              <div class="mt-3 d-flex gap-2">
+                <button class="btn btn-sm btn-success" onclick="moverTareaAProgreso(${tarea.id})">
+                  ▶️ Comenzar Ahora
+                </button>
+                <button class="btn btn-sm btn-outline-light" onclick="editCard(${tarea.id})">
+                  ✏️ Ver Detalles
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * Mover tarea a "En Progreso" desde el plan de acción
+ */
+async function moverTareaAProgreso(tareaId) {
+  try {
+    // Buscar la lista "En Progreso"
+    const listaEnProgreso = allLists.find(l => l.title === 'En Progreso');
+    
+    if (!listaEnProgreso) {
+      alert('No se encontró la lista "En Progreso"');
+      return;
+    }
+    
+    // Mover la tarea
+    await api('move_card', {
+      id: tareaId,
+      new_list_id: listaEnProgreso.id,
+      new_position: 0
+    });
+    
+    // Recargar datos
+    await load();
+    
+    // Mostrar mensaje de éxito
+    alert('✅ ¡Excelente! Tarea movida a "En Progreso". ¡A trabajar!');
+    
+    // Refrescar la vista de informe
+    if (vistaActual === 'informe') {
+      renderInformeView();
+    }
+  } catch (error) {
+    console.error('Error al mover tarea:', error);
+    alert('❌ Error al mover la tarea');
+  }
+}
 
 load();

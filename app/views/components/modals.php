@@ -13,12 +13,22 @@
           <input type="text" id="cardTitle" class="form-control bg-dark text-light border-secondary" placeholder="Título de la tarea" style="border-radius: 10px;">
         </div>
         <div class="mb-3">
-          <label class="form-label fw-semibold">📄 Descripción</label>
-          <textarea id="cardDesc" class="form-control bg-dark text-light border-secondary" rows="3" placeholder="Detalles o notas" style="border-radius: 10px;"></textarea>
+          <label class="form-label fw-semibold d-flex justify-content-between align-items-center">
+            <span>📄 Descripción</span>
+            <button type="button" class="btn btn-sm btn-outline-info" onclick="AI.autocompletarDescripcion()" style="border-radius: 8px; font-size: 0.85rem;">
+              ✨ IA Autocompletar
+            </button>
+          </label>
+          <textarea id="cardDesc" class="form-control bg-dark text-light border-secondary" rows="3" placeholder="Detalles o notas (o usa IA para generarlos automáticamente)" style="border-radius: 10px;"></textarea>
         </div>
         <div class="row">
           <div class="col-md-6 mb-3">
-            <label class="form-label fw-semibold">📂 Categoría</label>
+            <label class="form-label fw-semibold d-flex justify-content-between align-items-center">
+              <span>📂 Categoría</span>
+              <button type="button" class="btn btn-sm btn-outline-success" onclick="AI.sugerirCategoria()" style="border-radius: 8px; font-size: 0.75rem;">
+                ✨ IA Sugerir
+              </button>
+            </label>
             <select id="cardCategoria" class="form-select bg-dark text-light border-secondary" style="border-radius: 10px;">
               <option value="">Sin categoría</option>
               <option value="soporte">🔧 Soporte</option>
@@ -28,7 +38,12 @@
             </select>
           </div>
           <div class="col-md-6 mb-3">
-            <label class="form-label fw-semibold">⏱️ Story Points</label>
+            <label class="form-label fw-semibold d-flex justify-content-between align-items-center">
+              <span>⏱️ Story Points</span>
+              <button type="button" class="btn btn-sm btn-outline-primary" onclick="AI.estimarStoryPoints()" style="border-radius: 8px; font-size: 0.75rem;">
+                ✨ IA Estimar
+              </button>
+            </label>
             <select id="cardPoints" class="form-select bg-dark text-light border-secondary" style="border-radius: 10px;">
               <option value="0">Sin estimar</option>
               <option value="1">1 - Muy rápida</option>

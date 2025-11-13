@@ -44,7 +44,10 @@
               📋 Kanban
             </button>
             <button class="btn btn-sm btn-outline-primary" id="btnVistaLista" style="border-color: #3b82f6; color: #3b82f6; font-size: 0.85rem; padding: 0.35rem 0.75rem;">
-              � Lista
+              📝 Lista
+            </button>
+            <button class="btn btn-sm btn-outline-primary" id="btnVistaInforme" style="border-color: #3b82f6; color: #3b82f6; font-size: 0.85rem; padding: 0.35rem 0.75rem;">
+              📊 Informe
             </button>
           </div>
           

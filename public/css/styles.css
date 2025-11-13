@@ -574,3 +574,25 @@ input[type="date"].bg-dark::-webkit-calendar-picker-indicator {
 #vistaLista .btn-info:hover {
   background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
 }
+
+/* ============================================
+   ANIMACIÓN PULSE PARA BADGES DE PRIORIDAD IA
+   ============================================ */
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 0.9;
+  }
+}
+
+/* Destacar top 3 con glow effect */
+.card-item:has([style*="🥇"]),
+.card-item:has([style*="🥈"]),
+.card-item:has([style*="🥉"]) {
+  border-left: 3px solid #fbbf24;
+  box-shadow: 0 4px 12px rgba(251, 191, 36, 0.2);
+}
